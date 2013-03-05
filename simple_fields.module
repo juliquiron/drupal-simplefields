@@ -1,0 +1,139 @@
+<?php
+
+/**
+ * @file
+ * Module for the Entityform Entity - a starting point to create your own Entity
+ * and associated administration interface
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function simple_fields_menu() {
+  $items = array();
+
+  $items['admin/config/content/simplefields'] = array(
+      'title' => 'Simple fields',
+      'description' => '',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simple_fields_manager'),
+      'access arguments' => array('access simple fields manager'),
+//      'file' => 'simple_fields.forms.inc',
+  );
+  $items['admin/config/content/simplefields/config'] = array(
+      'title' => 'Simple fields',
+      'description' => '',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simple_fields_manager_admin'),
+      'access arguments' => array('admin simple fields manager'),
+//      'file' => 'simple_fields.forms.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function simple_fields_permission() {
+  $permissions = array(
+      'access simple fields manager' => array(
+          'title' => t('Access to simple field manager'),
+      ),
+      'admin simple fields manager' => array(
+          'title' => t('Administer the simple field manager configuration'),
+      ),
+  );
+  return $permissions;
+}
+/**
+ * Implements menu callbacks
+ */
+function simple_fields_manager($form, &$form_state) {
+  require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  $entity_type =  variable_get('simple_fields_entity_type','');
+  $bundle = variable_get('simple_fields_entity_bundle','');
+  $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
+
+  /**
+   * Lets customize the default form 'manage fields'
+   */
+  // load needed vars like overview_form
+  $bundle = field_extract_bundle($entity_type, $bundle);
+
+  // Gather bundle information.
+  $instances = field_info_instances($entity_type, $bundle);
+  $field_types = field_info_field_types();
+  $widget_types = field_info_widget_types();
+  $extra_fields = field_info_extra_fields($entity_type, $bundle, 'form');
+
+  $form['fields']['#header'] = array (
+    t('Label'),
+    t('Weight'),
+    t('Parent'),
+    array('data' => t('Operations'), 'colspan' => 2),
+    );
+
+  foreach ($instances as $name => $instance) {
+    $field = field_info_field($instance['field_name']);
+    unset($form['fields'][$name]['field_name']);
+    unset($form['fields'][$name]['type']);
+    unset($form['fields'][$name]['widget_type']);
+    unset($form['fields'][$name]['edit']);
+  }
+  unset($form['fields']['_add_existing_field']);
+  $form['fields']['_add_new_field']['type']['#type'] = 'hidden';
+  $form['fields']['_add_new_field']['type']['#value'] = variable_get('simple_fields_field_type' ,'');
+  $form['fields']['_add_new_field']['widget_type']['#type'] = 'hidden';
+  $form['fields']['_add_new_field']['widget_type']['#value'] = variable_get('simple_fields_field_widget' ,'');
+  $form['fields']['_add_new_field']['field_name']['#cell_attributes'] = array('colspan' => 2);
+  $form['fields']['_add_new_field']['field_name']['#size'] = 60;
+  $form['fields']['_add_new_field']['field_name']['#maxlength'] = 260;
+
+
+  dsm($form);
+  return $form;
+
+}
+function simple_fields_manager_admin($form, &$form_state) {
+  require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  $field_type_options = field_ui_field_type_options();
+  $widget_type_options = field_ui_widget_type_options(NULL, TRUE);
+  $form['simple_fields_entity_type'] = array ( // Select the entity to work with
+    '#type' => 'textfield',
+    '#title' => t('Select the entity type to work with'),
+    '#default_value' => variable_get('simple_fields_entity_type', ''),
+    // TODO CARREGAR LA LLISTA DE VALORS POSIBLES VIA API);
+    );
+  $form['simple_fields_entity_bundle'] = array ( //Select the entity bundle to work with
+    '#type' => 'textfield',
+    '#title' => t('Select the entity type to work with'),
+    '#default_value' => variable_get('simple_fields_entity_bundle', ''),
+    // TODO CARREGAR LA LLISTA DE VALORS POSIBLES VIA API);
+    );
+  $form['simple_fields_field_type'] = array (
+        '#type' => 'select',
+        '#title' => t('Type of new field'),
+        '#title_display' => 'invisible',
+        '#options' => $field_type_options,
+        '#empty_option' => t('- Select a field type -'),
+        '#description' => t('Type of data to store.'),
+        '#attributes' => array('class' => array('field-type-select')),
+        '#prefix' => '<div class="add-new-placeholder">&nbsp;</div>',
+        '#default_value' => variable_get('simple_fields_field_type' ,''),
+    );
+  $form['simple_fields_field_widget'] = array (
+        '#type' => 'select',
+        '#title' => t('Widget for new field'),
+        '#title_display' => 'invisible',
+        '#options' => $widget_type_options,
+        '#empty_option' => t('- Select a widget -'),
+        '#description' => t('Form element to edit the data.'),
+        '#attributes' => array('class' => array('widget-type-select')),
+        '#cell_attributes' => array('colspan' => 3),
+        '#prefix' => '<div class="add-new-placeholder">&nbsp;</div>',
+        '#default_value' => variable_get('simple_fields_field_widget', ''),
+      );
+ 
+  return system_settings_form($form);
+}
+
