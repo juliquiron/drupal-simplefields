@@ -18,6 +18,7 @@ function simple_fields_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('simple_fields_manager'),
       'access arguments' => array('access simple fields manager'),
+            'type' => MENU_LOCAL_TASK,
 //      'file' => 'simple_fields.forms.inc',
   );
   $items['admin/config/content/simplefields/config'] = array(
@@ -49,7 +50,8 @@ function simple_fields_permission() {
  * Implements menu callbacks
  */
 function simple_fields_manager($form, &$form_state) {
-  require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  //require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
   $entity_type =  variable_get('simple_fields_entity_type','');
   $bundle = variable_get('simple_fields_entity_bundle','');
   $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
@@ -79,6 +81,7 @@ function simple_fields_manager($form, &$form_state) {
     unset($form['fields'][$name]['type']);
     unset($form['fields'][$name]['widget_type']);
     unset($form['fields'][$name]['edit']);
+//    $form['fields'][$name]['label']['#cell_attributes'] = array('colspan' => 8);
   }
   unset($form['fields']['_add_existing_field']);
   $form['fields']['_add_new_field']['type']['#type'] = 'hidden';
@@ -89,9 +92,84 @@ function simple_fields_manager($form, &$form_state) {
   $form['fields']['_add_new_field']['field_name']['#size'] = 60;
   $form['fields']['_add_new_field']['field_name']['#maxlength'] = 260;
 
-
   dsm($form);
   return $form;
+
+}
+function simple_fields_manager_submit($form, &$form_state) {
+  watchdog('simple_fields', "form submit");
+  $form_values = $form_state['values']['fields'];
+  $entity_type = $form['#entity_type'];
+  $bundle = $form['#bundle'];
+  $admin_path = _field_ui_bundle_admin_path($entity_type, $bundle);
+
+  $bundle_settings = field_bundle_settings($entity_type, $bundle);
+
+  // Update field weights.
+  foreach ($form_values as $key => $values) {
+    if (in_array($key, $form['#fields'])) {
+      $instance = field_read_instance($entity_type, $key, $bundle);
+      $instance['widget']['weight'] = $values['weight'];
+      field_update_instance($instance);
+    }
+    elseif (in_array($key, $form['#extra'])) {
+      $bundle_settings['extra_fields']['form'][$key]['weight'] = $values['weight'];
+    }
+  }
+
+  field_bundle_settings($entity_type, $bundle, $bundle_settings);
+
+  $destinations = array();
+
+  // Create new field.
+  $field = array();
+  if (!empty($form_values['_add_new_field']['field_name'])) {
+    $values = $form_values['_add_new_field'];
+
+    $field = array(
+      'field_name' => $values['field_name'],
+      'type' => $values['type'],
+      'translatable' => $values['translatable'],
+    );
+    $instance = array(
+      'field_name' => $field['field_name'],
+      'entity_type' => $entity_type,
+      'bundle' => $bundle,
+      'label' => $values['label'],
+      'widget' => array(
+        'type' => $values['widget_type'],
+        'weight' => $values['weight'],
+        'settings' => array('display_label' => 1),
+      ),
+    );
+
+    dsm($field);
+    dsm($instance);
+    // Create the field and instance.
+    try {
+      field_create_field($field);
+      field_create_instance($instance);
+
+//      $destinations[] = $admin_path . '/fields/' . $field['field_name'] . '/field-settings';
+//      $destinations[] = $admin_path . '/fields/' . $field['field_name'];
+
+      // Store new field information for any additional submit handlers.
+      $form_state['fields_added']['_add_new_field'] = $field['field_name'];
+    }
+    catch (Exception $e) {
+      drupal_set_message(t('There was a problem creating field %label: !message', array('%label' => $instance['label'], '!message' => $e->getMessage())), 'error');
+    }
+  }
+
+  if ($destinations) {
+    $destination = drupal_get_destination();
+    $destinations[] = $destination['destination'];
+    unset($_GET['destination']);
+    $form_state['redirect'] = field_ui_get_destinations($destinations);
+  }
+  else {
+    drupal_set_message(t('Your settings have been saved.'));
+  }
 
 }
 function simple_fields_manager_admin($form, &$form_state) {
@@ -111,6 +189,7 @@ function simple_fields_manager_admin($form, &$form_state) {
     // TODO CARREGAR LA LLISTA DE VALORS POSIBLES VIA API);
     );
   $form['simple_fields_field_type'] = array (
+        '#title' => t('Type of the data to store'),
         '#type' => 'select',
         '#title' => t('Type of new field'),
         '#title_display' => 'invisible',
@@ -122,6 +201,7 @@ function simple_fields_manager_admin($form, &$form_state) {
         '#default_value' => variable_get('simple_fields_field_type' ,''),
     );
   $form['simple_fields_field_widget'] = array (
+        '#title' => t('Form element to edit the data'),
         '#type' => 'select',
         '#title' => t('Widget for new field'),
         '#title_display' => 'invisible',
