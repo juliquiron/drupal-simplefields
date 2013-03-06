@@ -12,6 +12,54 @@
 function simple_fields_menu() {
   $items = array();
 
+  // Create tabs for all possible bundles.
+  foreach (entity_get_info() as $entity_type => $entity_info) {
+    if ($entity_info['fieldable']) {
+      foreach ($entity_info['bundles'] as $bundle_name => $bundle_info) {
+        if (isset($bundle_info['admin'])) {
+          // Extract path information from the bundle.
+          $path = $bundle_info['admin']['path'];
+          // Different bundles can appear on the same path (e.g. %node_type and
+          // %comment_node_type). To allow field_ui_menu_load() to extract the
+          // actual bundle object from the translated menu router path
+          // arguments, we need to identify the argument position of the bundle
+          // name string ('bundle argument') and pass that position to the menu
+          // loader. The position needs to be casted into a string; otherwise it
+          // would be replaced with the bundle name string.
+          if (isset($bundle_info['admin']['bundle argument'])) {
+            $bundle_arg = $bundle_info['admin']['bundle argument'];
+            $bundle_pos = (string) $bundle_arg;
+          }
+          else {
+            $bundle_arg = $bundle_name;
+            $bundle_pos = '0';
+          }
+          // This is the position of the %field_ui_menu placeholder in the
+          // items below.
+          $field_position = count(explode('/', $path)) + 1;
+
+          $items["$path/fields/%field_ui_menu/location_condition"] = array(
+            'load arguments' => array($entity_type, $bundle_arg, $bundle_pos, '%map'),
+            'title' => 'Edit',
+            'page callback' => 'drupal_get_form',
+            'page arguments' => array('simple_fields_manager_location_condition', $field_position),
+            'type' => MENU_DEFAULT_LOCAL_TASK,
+          );
+ 
+
+        }
+      }
+    }
+  }
+  $items["admin/config/content/simplefields/fields/%/location_condition"] = array(
+    'load arguments' => array($entity_type, $bundle_arg, $bundle_pos, '%map'),
+    'title' => 'Edit',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('simple_fields_manager_location_condition', $field_position),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'access arguments' => array('access simple fields manager'),
+  );
+
   $items['admin/config/content/simplefields'] = array(
       'title' => 'Simple fields',
       'description' => '',
@@ -49,11 +97,20 @@ function simple_fields_permission() {
 /**
  * Implements menu callbacks
  */
+function simple_fields_manager_location_condition($form, &$form_state, $instance) {
+  dsm($form);
+  dsm($instance);
+
+  $form = array();
+  return system_settings_form($form);
+}
 function simple_fields_manager($form, &$form_state) {
   //require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
   include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
   $entity_type =  variable_get('simple_fields_entity_type','');
   $bundle = variable_get('simple_fields_entity_bundle','');
+  //$admin_path = _field_ui_bundle_admin_path($entity_type, $bundle);
+  $admin_path = 'admin/config/content/simplefields';
   $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
 
   /**
@@ -72,16 +129,31 @@ function simple_fields_manager($form, &$form_state) {
     t('Label'),
     t('Weight'),
     t('Parent'),
-    array('data' => t('Operations'), 'colspan' => 2),
+    array('data' => t('Operations'), 'colspan' => 3),
     );
+
+//  conditional_fields_dependency_insert();
 
   foreach ($instances as $name => $instance) {
     $field = field_info_field($instance['field_name']);
+    $admin_field_path = $admin_path . '/fields/' . $instance['field_name'];
     unset($form['fields'][$name]['field_name']);
     unset($form['fields'][$name]['type']);
     unset($form['fields'][$name]['widget_type']);
     unset($form['fields'][$name]['edit']);
 //    $form['fields'][$name]['label']['#cell_attributes'] = array('colspan' => 8);
+    $form['fields'][$name]['location_condition'] = array (
+      '#type' => 'link',
+      '#title' => t('location condition'),
+      '#href' => $admin_field_path . '/location_condition',
+      '#options' => array('attributes' => array('title' => t('Add a location based condition.'))),
+      );
+    $form['fields'][$name]['field_condition'] = array (
+      '#type' => 'link',
+      '#title' => t('field condition'),
+      '#href' => $admin_field_path . '/location_condition',
+      '#options' => array('attributes' => array('title' => t('Add a field based condition.'))),
+      );
   }
   unset($form['fields']['_add_existing_field']);
   $form['fields']['_add_new_field']['type']['#type'] = 'hidden';
