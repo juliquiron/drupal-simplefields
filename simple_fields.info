@@ -8,6 +8,8 @@ configure = admin/structure/entityform_types/simplefields
 dependencies[] = entity
 dependencies[] = views
 dependencies[] = rules
+dependencies[] = conditional_fields
+
 
 ;files[] = entityform.admin.inc
 files[] = simple_fields.forms.inc
