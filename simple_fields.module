@@ -131,49 +131,85 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
 }
 
 function simple_fields_manager_location_condition($form, &$form_state, $instance) {
-  $instance_name = field_read_instances(array('id' => $instance));
-  $instance_name = array_shift($instance_name);
-  $instance_name = $instance_name['field_name'];
   $entity_type = variable_get('simple_fields_entity_type','');
   $bundle_name = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
   $dependee = field_info_field($location_field);
+  $instance_name = field_read_instances(array('id' => $instance));
+  $instance_name = array_shift($instance_name);
+  $instance_name = $instance_name['field_name'];
   $instances = field_read_instances(array('field_id' => $dependee['id'], 'entity_type' => $entity_type, 'bundle' => $bundle_name));
-  dsm($instances);
   $dependee_instance = array_shift($instances);
   $dependee_instance['default_value_function'] = '';
   $dummy_form = array('#parents' => array());
   $field = field_default_form($entity_type, NULL, $dependee, $dependee_instance, LANGUAGE_NONE, array(), $dummy_form, $form_state);
-  dsm($field);
   $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
-  dsm( $conditions['dependees'][$location_field]);
-  dsm( $conditions);
-  dsm('prefor');
   foreach ( $conditions['dependees'][$location_field] as $id => $cond) {
     /** We assume there is only one dependency in this instance **/
-    dsm($instance_name);
-    dsm($cond['dependent']);
     if($cond['dependent'] == $instance_name) {
       // We are getting the id of the condition we whant to change 
-//      $field[$location_field]['und']['#default_value'] = $cond['options']['value'];
-  dsm($location_field);
       foreach($cond['options']['value'] as $k => $v) {
-        $field[$location_field]['und']['#default_value'][] = $v['tid'];
+        $field[$location_field]['und']['#default_value'][$v['tid']] = $v;
       }
-      break;
     }
   }
+  $field['depenent'] = array(
+      '#type' => 'hidden',
+      '#value' => $instance,
+    );
+  $field['dependee'] = array(
+      '#type' => 'hidden',
+      '#value' => $dependee_instance['id'],
+    );
+  $field['#submit'][] = 'simple_fields_manager_location_condition_submit';
+//  $field[$location_field]['und']['#type'] = 'select';
+//  $field[$location_field]['und']['#multiple'] = TRUE;
+  $field[$location_field]['und']['#max_choices'] = -1;
+  $field[$location_field]['und']['#leaves_only'] = 0;
+  $field[$location_field]['und']['#cascading_selection'] = 1;
   
-  dsm($field);
-  dsm($id);
-  dsm($conditions);
   return system_settings_form($field);
-  /** Al desar cal borrar la condició ja existent! **/
 }
+function simple_fields_manager_location_condition_submit($form, &$form_state) {
+  /**
+   * Prepare data
+   */
+  $entity_type = variable_get('simple_fields_entity_type','');
+  $bundle_name = variable_get('simple_fields_entity_bundle','');
+  $location_field = variable_get('simple_fields_location_field','');
+  $instance_name = field_read_instances(array('id' => $form_state['values']['depenent']));
+  $instance_name = array_shift($instance_name);
+  $instance_name = $instance_name['field_name'];
+  /** 
+   * Clear exsistent conditions
+   */
+  $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
+  foreach ( $conditions['dependees'][$location_field] as $id => $cond) {
+    if($cond['dependent'] == $instance_name) {
+      conditional_fields_dependency_delete(array($id));
+    }
+  }
+  /**
+   * Create neu conditions
+   */
+  $options = array();
+  $options['state'] =  'visible';
+  $options['condition'] =  'value';
+  $options['grouping'] =  'OR';
+  $options['effect'] =  'slide';
+  $options['effect_options'] = array('speed' =>  '400');
+  $options['selector'] =  '';
+  $options['values_set'] =  '1';
+  $options['value_form'] =  NULL;
+  foreach($form_state['values'][$location_field]['und'] as $k => $v) {
+    $options['value'] = array(0=> $v);
+    $options['value_form'] = $v['tid'];
+    conditional_fields_dependency_insert($form_state['values']['dependee'],$form_state['values']['depenent'], $options);
+  }
+  drupal_set_message(t('condition introduced'));
+} 
 
 function simple_fields_manager_field_condition_submit($form, &$form_state) {
-  dsm($form);
- 
   $options = array();
   $options['state'] =  'visible';
   $options['condition'] =  'value';
