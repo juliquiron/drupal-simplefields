@@ -108,8 +108,10 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
   // Token form conditional_fields module .admin.inc file
   $entity_type = variable_get('simple_fields_entity_type','');
   $bundle_name = variable_get('simple_fields_entity_bundle','');
+  $location_field = variable_get('simple_fields_location_field','');
   $instances = field_info_instances($entity_type, $bundle_name);
   foreach ($instances as $field) {
+    if($field['field_name'] == $location_field) { continue; }
     $fields[$field['id']] = check_plain($field['label'] . ' (' . $field['field_name'] . ')');
   }
   asort($fields);
@@ -228,6 +230,7 @@ function simple_fields_manager($form, &$form_state) {
   include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
   $entity_type =  variable_get('simple_fields_entity_type','');
   $bundle = variable_get('simple_fields_entity_bundle','');
+  $location_field = variable_get('simple_fields_location_field','');
   //$admin_path = _field_ui_bundle_admin_path($entity_type, $bundle);
   $admin_path = 'admin/config/content/simplefields';
   $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
@@ -283,6 +286,7 @@ function simple_fields_manager($form, &$form_state) {
   $form['fields']['_add_new_field']['field_name']['#cell_attributes'] = array('colspan' => 2);
   $form['fields']['_add_new_field']['field_name']['#size'] = 60;
   $form['fields']['_add_new_field']['field_name']['#maxlength'] = 260;
+  unset($form['fields'][$location_field]);
 
   dsm($form);
   return $form;
