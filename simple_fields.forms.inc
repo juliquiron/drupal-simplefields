@@ -24,13 +24,37 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
   $exclude_fields[$location_field] = $location_field;
   $exclude_fields[$instance_name] = $instance_name;
   $instances = field_info_instances($entity_type, $bundle_name);
+  $aviable_conditionals = array();
   // Excluding fields
   foreach ($instances as $field) {
     if(in_array($field['field_name'], $exclude_fields)) { continue; }
     $fields[$field['id']] = check_plain($field['label'] . ' (' . $field['field_name'] . ')');
+    $aviable_conditionals[$field['field_name']] = $field['id'];
   }
+  // Load current dependences to set the default value
+  $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
+  $default_value = 'none';
+  $current_cond = '';
+  dsm($conditions);
+  if(isset($conditions['dependents'][$instance_name])) {
+    foreach ( $conditions['dependents'][$instance_name] as $id => $cond) {
+      /** We assume there is only one dependency in this instance **/
+        dsm($cond['dependee']);
+      if(array_key_exists($cond['dependee'],$aviable_conditionals)) {
+          $default_value = $aviable_conditionals[$cond['dependee']];
+          $current_cond = $id;
+          dsm($default_value);
+      }
+    }
+  }
+  $field[$location_field]['und']['#title'] = t('Set location condition for: ') . $instance_label;
+  $fields['none'] = t(' - No condition - ');
   drupal_set_title(t('Set field dependence for: ') . $instance_label);
   asort($fields);
+  $form['current_dep'] = array(
+    '#type' => 'hidden',
+    '#value' => $current_cond,
+  );
   $form['depenent'] = array(
       '#type' => 'hidden',
       '#value' => $instance,
@@ -40,13 +64,34 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
       '#title' => t('Set field dependence for: ') . $instance_label,
   //    '#title_display' => 'invisible',
       '#description' => t('Dependee'),
-      '#empty_option' => t('- Select a field -'),
       '#options' => $fields,
+      '#default_value' => $default_value,
     );
   $form =  system_settings_form($form);
   $form['#submit'][] = 'simple_fields_manager_field_condition_submit';
   dsm($form);
   return $form;
+}
+
+function simple_fields_manager_field_condition_submit($form, &$form_state) {
+  // TODO if the condition is the same not delete and create, better ignore
+  if($form_state['values']['current_dep'] != '') {
+    conditional_fields_dependency_delete(array($form_state['values']['current_dep']));
+  }
+  if($form_state['values']['dependee'] != 'none') {
+    $options = array();
+    $options['state'] =  'visible';
+    $options['condition'] =  'value';
+    $options['grouping'] =  'AND';
+    $options['effect'] =  'slide';
+    $options['effect_options'] = array('speed' =>  '400');
+    $options['selector'] =  '';
+    $options['values_set'] =  '1';
+    $options['value_form'] =  NULL;
+    $options['value'] = array(0=>array('value' => NULL));
+    conditional_fields_dependency_insert($form_state['values']['dependee'],$form_state['values']['depenent'], $options);
+  }
+  $form_state['redirect'] = 'admin/config/content/simplefields';
 }
 
 function simple_fields_manager_location_condition($form, &$form_state, $instance) {
@@ -136,22 +181,6 @@ function simple_fields_manager_location_condition_submit($form, &$form_state) {
   drupal_set_message(t('condition introduced'));
   $form_state['redirect'] = 'admin/config/content/simplefields';
 } 
-
-function simple_fields_manager_field_condition_submit($form, &$form_state) {
-  $options = array();
-  $options['state'] =  'visible';
-  $options['condition'] =  'value';
-  $options['grouping'] =  'AND';
-  $options['effect'] =  'slide';
-  $options['effect_options'] = array('speed' =>  '400');
-  $options['selector'] =  '';
-  $options['values_set'] =  '1';
-  $options['value_form'] =  NULL;
-  $options['value'] = array(0=>array('value' => NULL));
-  conditional_fields_dependency_insert($form_state['values']['dependee'],$form_state['values']['depenent'], $options);
-  drupal_set_message(t('condition introduced'));
-  $form_state['redirect'] = 'admin/config/content/simplefields';
-}
 
 /**
  * Form constructor for the field instance settings form.

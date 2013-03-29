@@ -123,15 +123,17 @@ function simple_fields_permission() {
 
 function simple_fields_manager($form, &$form_state) {
   drupal_set_title(t('Simple fields manager'));
-  require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
-  //include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
+  //require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
   $entity_type =  variable_get('simple_fields_entity_type','');
   $bundle = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
   $exclude_fields = variable_get('simple_fields_exclude_fields','');
+  $exclude_fields[$location_field] = $location_field;
   //$admin_path = _field_ui_bundle_admin_path($entity_type, $bundle);
   $admin_path = 'admin/config/content/simplefields';
   $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
+  $conditions = conditional_fields_load_dependencies($entity_type, $bundle);
 
   /**
    * Lets customize the default form 'manage fields'
@@ -144,6 +146,13 @@ function simple_fields_manager($form, &$form_state) {
   $field_types = field_info_field_types();
   $widget_types = field_info_widget_types();
   $extra_fields = field_info_extra_fields($entity_type, $bundle, 'form');
+
+  // Get the possible field conditioning
+  $aviable_conditionals = array();
+  foreach ($instances as $field) {
+    if(in_array($field['field_name'], $exclude_fields)) { continue; }
+    $aviable_conditionals[$field['field_name']] = $field['id'];
+  }
 
   $form['fields']['#header'] = array (
     t('Label'),
@@ -167,15 +176,47 @@ function simple_fields_manager($form, &$form_state) {
     unset($form['fields'][$name]['widget_type']);
     unset($form['fields'][$name]['edit']);
 //    $form['fields'][$name]['label']['#cell_attributes'] = array('colspan' => 8);
+    $field_cond_list = '';
+    $location_cond_list = '';
+    if(isset($conditions['dependents'][$name])) {
+      foreach($conditions['dependents'][$name] as $id => $cond) {
+        if($cond['dependee'] == $location_field) {
+          foreach($cond['options']['value'] as $id => $tid) {
+            $location_cond_list .= taxonomy_term_load($tid['tid'])->name . ', ';
+          }
+        }
+        if(array_key_exists($cond['dependee'],$aviable_conditionals)) {
+          $field_cond_list .= $cond['dependee'] . ', ';
+        }
+      }
+    }
+    if($field_cond_list == '') {
+      $field_desc = t('This question is not conditioned to any other question');
+    } else {
+      $field_desc = t('This question is visible when  %list is checked', array('%list' => substr($field_cond_list, 0 , -2)));
+    }
+    if($location_cond_list == '') {
+      $location_desc = t('This question is not conditioned to a region');
+    } else {
+      $list = substr($location_cond_list, 0, -2);
+      if(strlen($list) > 200) {
+        $list = substr($list, 0, 197) . '...';
+      }
+      $location_desc = t('This question is visible in the regions: %list', array('%list' => $list));
+    }
     $form['fields'][$name]['location_condition'] = array (
       '#type' => 'link',
       '#title' => t('location condition'),
+      '#description' => $location_desc,
+      '#suffix' => '<div class="item-description">'.$location_desc.'</div>',
       '#href' => $admin_field_path . '/location_condition',
       '#options' => array('attributes' => array('title' => t('Add a location based condition.'))),
       );
     $form['fields'][$name]['field_condition'] = array (
       '#type' => 'link',
       '#title' => t('field condition'),
+      '#description' => $field_desc,
+      '#suffix' => '<div class="item-description">'.$field_desc.'</div>',
       '#href' => $admin_field_path . '/field_condition',
       '#options' => array('attributes' => array('title' => t('Add a field based condition.'))),
       );
@@ -191,15 +232,21 @@ function simple_fields_manager($form, &$form_state) {
   $form['fields']['_add_new_field']['type']['#value'] = variable_get('simple_fields_field_type' ,'');
   $form['fields']['_add_new_field']['widget_type']['#type'] = 'hidden';
   $form['fields']['_add_new_field']['widget_type']['#value'] = variable_get('simple_fields_field_widget' ,'');
-  $form['fields']['_add_new_field']['field_name']['#cell_attributes'] = array('colspan' => 2);
-  $form['fields']['_add_new_field']['field_name']['#size'] = 60;
-  $form['fields']['_add_new_field']['field_name']['#maxlength'] = 260;
+  //$form['fields']['_add_new_field']['label']['#cell_attributes'] = array('colspan' => 2);
+  $form['fields']['_add_new_field']['label']['#size'] = 60;
+  $form['fields']['_add_new_field']['label']['#maxlength'] = 260;
+  //$form['fields']['_add_new_field']['field_name']['#type'] = 'hidden';
+  $form['fields']['_add_new_field']['field_name']['#size'] = 30;
+  $form['fields']['_add_new_field']['field_name']['#maxlength'] = 30;
   unset($form['fields'][$location_field]);
 
-  dsm($form);
+  $form['#attached']['css'][] = drupal_get_path('module', 'simple_fields') . '/css/forms.css';
+  $form['#submit'][] = 'simple_fields_manager_submit';
+
   return $form;
 
 }
+
 function simple_fields_manager_submit($form, &$form_state) {
   watchdog('simple_fields', "form submit");
   $form_values = $form_state['values']['fields'];
@@ -259,6 +306,8 @@ function simple_fields_manager_submit($form, &$form_state) {
       drupal_set_message(t('There was a problem creating field %label: !message', array('%label' => $instance['label'], '!message' => $e->getMessage())), 'error');
     }
   }
+
+  field_cache_clear();
 
   if ($destinations) {
     $destination = drupal_get_destination();

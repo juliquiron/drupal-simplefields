@@ -5,3 +5,6 @@ Is needed to add this line into .htaccess file:
 In the <IfModule mod_php5.c> statment
 
 
+TODO
+====
+modularize the code!
