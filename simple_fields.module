@@ -52,16 +52,27 @@ function simple_fields_menu() {
     'title' => t('Edit field dependence'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('simple_fields_manager_field_condition', $field_position),
-    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'type' => MENU_CALLBACK,
     'access arguments' => array('access simple fields manager'),
+      'file' => 'simple_fields.forms.inc',
   );
   $items["admin/config/content/simplefields/fields/%/location_condition"] = array(
     'load arguments' => array($entity_type, $bundle_arg, $bundle_pos, '%map'),
     'title' => t('Edit location dependence'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('simple_fields_manager_location_condition', $field_position),
-    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'type' => MENU_CALLBACK,
     'access arguments' => array('access simple fields manager'),
+      'file' => 'simple_fields.forms.inc',
+  );
+  $items["admin/config/content/simplefields/fields/%/edit"] = array(
+    'load arguments' => array($entity_type, $bundle_arg, $bundle_pos, '%map'),
+    'title' => t('Edit question'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('simple_fields_field_edit_label_form', $field_position),
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access simple fields manager'),
+      'file' => 'simple_fields.forms.inc',
   );
   $items['admin/config/content/simplefields'] = array(
       'title' => 'Simple fields',
@@ -69,16 +80,22 @@ function simple_fields_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('simple_fields_manager'),
       'access arguments' => array('access simple fields manager'),
-            'type' => MENU_LOCAL_TASK,
+      'type' => MENU_NORMAL_ITEM,
 //      'file' => 'simple_fields.forms.inc',
   );
+  $items['admin/config/content/simplefields/edit'] = array(
+    'title' => t('Edit'),
+    'weight' => -10,
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
   $items['admin/config/content/simplefields/config'] = array(
-      'title' => 'Simple fields',
+      'title' => 'Configuration',
       'description' => '',
       'page callback' => 'drupal_get_form',
       'page arguments' => array('simple_fields_manager_admin'),
       'access arguments' => array('admin simple fields manager'),
-//      'file' => 'simple_fields.forms.inc',
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'simple_fields.forms.inc',
   );
   return $items;
 }
@@ -104,16 +121,22 @@ function simple_fields_permission() {
 function simple_fields_manager_field_condition($form, &$form_state, $instance) {
   dsm($instance);
   $form = array();
-  //TODO modularitzar la configuració i treure elements harcoded
   // Token form conditional_fields module .admin.inc file
   $entity_type = variable_get('simple_fields_entity_type','');
   $bundle_name = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
+  $instance_name = field_read_instances(array('id' => $instance));
+  $instance_name = array_shift($instance_name);
+  $instance_label = $instance_name['label'];
+  $instance_name = $instance_name['field_name'];
   $instances = field_info_instances($entity_type, $bundle_name);
   foreach ($instances as $field) {
-    if($field['field_name'] == $location_field) { continue; }
+    // TODO excloure camps arbitraris definits a la confiugració
+    //   comparacio darrais amb is_in
+    if($field['field_name'] == $location_field || $field['field_name'] == $instance_name) { continue; }
     $fields[$field['id']] = check_plain($field['label'] . ' (' . $field['field_name'] . ')');
   }
+  drupal_set_title(t('Set field dependence for: ') . $instance_label);
   asort($fields);
   $form['depenent'] = array(
       '#type' => 'hidden',
@@ -121,8 +144,8 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
     );
   $form['dependee'] = array(
       '#type' => 'select',
-      '#title' => t('Dependee'),
-      '#title_display' => 'invisible',
+      '#title' => t('Set field dependence for: ') . $instance_label,
+  //    '#title_display' => 'invisible',
       '#description' => t('Dependee'),
       '#options' => $fields,
     );
@@ -133,28 +156,36 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
 }
 
 function simple_fields_manager_location_condition($form, &$form_state, $instance) {
+  // Get configuration values
   $entity_type = variable_get('simple_fields_entity_type','');
   $bundle_name = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
+  // Prepare the location field
   $dependee = field_info_field($location_field);
   $instance_name = field_read_instances(array('id' => $instance));
   $instance_name = array_shift($instance_name);
+  $instance_label = $instance_name['label'];
   $instance_name = $instance_name['field_name'];
   $instances = field_read_instances(array('field_id' => $dependee['id'], 'entity_type' => $entity_type, 'bundle' => $bundle_name));
   $dependee_instance = array_shift($instances);
   $dependee_instance['default_value_function'] = '';
   $dummy_form = array('#parents' => array());
   $field = field_default_form($entity_type, NULL, $dependee, $dependee_instance, LANGUAGE_NONE, array(), $dummy_form, $form_state);
+  dsm($field);
   $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
   foreach ( $conditions['dependees'][$location_field] as $id => $cond) {
     /** We assume there is only one dependency in this instance **/
     if($cond['dependent'] == $instance_name) {
       // We are getting the id of the condition we whant to change 
       foreach($cond['options']['value'] as $k => $v) {
-        $field[$location_field]['und']['#default_value'][$v['tid']] = $v;
+        //$field[$location_field]['und']['#default_value'][$v['tid']] = $v;
+        $field[$location_field]['und']['#default_value'][$v['tid']] = $v['tid'];
       }
     }
   }
+  $field[$location_field]['und']['#title'] = t('Set location condition for: ') . $instance_label;
+  drupal_set_title(t('Set location condition for: ') . $instance_label);
+  dsm($field);
   $field['depenent'] = array(
       '#type' => 'hidden',
       '#value' => $instance,
@@ -226,8 +257,9 @@ function simple_fields_manager_field_condition_submit($form, &$form_state) {
   drupal_set_message(t('condition introduced'));
 }
 function simple_fields_manager($form, &$form_state) {
-  //require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
-  include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
+  drupal_set_title(t('Simple fields manager'));
+  require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
+  //include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'simple_fields') . '/simple_fields.admin.inc'; 
   $entity_type =  variable_get('simple_fields_entity_type','');
   $bundle = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
@@ -251,7 +283,7 @@ function simple_fields_manager($form, &$form_state) {
     t('Label'),
     t('Weight'),
     t('Parent'),
-    array('data' => t('Operations'), 'colspan' => 3),
+    array('data' => t('Operations'), 'colspan' => 4),
     );
 
 //  conditional_fields_dependency_insert();
@@ -276,6 +308,12 @@ function simple_fields_manager($form, &$form_state) {
       '#title' => t('field condition'),
       '#href' => $admin_field_path . '/field_condition',
       '#options' => array('attributes' => array('title' => t('Add a field based condition.'))),
+      );
+    $form['fields'][$name]['edit'] = array (
+      '#type' => 'link',
+      '#title' => t('edit question'),
+      '#href' => $admin_field_path . '/edit',
+      '#options' => array('attributes' => array('title' => t('Edit question.'))),
       );
   }
   unset($form['fields']['_add_existing_field']);
@@ -312,16 +350,13 @@ function simple_fields_manager_submit($form, &$form_state) {
       $bundle_settings['extra_fields']['form'][$key]['weight'] = $values['weight'];
     }
   }
-
   field_bundle_settings($entity_type, $bundle, $bundle_settings);
-
   $destinations = array();
 
   // Create new field.
   $field = array();
   if (!empty($form_values['_add_new_field']['field_name'])) {
     $values = $form_values['_add_new_field'];
-
     $field = array(
       'field_name' => $values['field_name'],
       'type' => $values['type'],
@@ -345,10 +380,8 @@ function simple_fields_manager_submit($form, &$form_state) {
     try {
       field_create_field($field);
       field_create_instance($instance);
-
 //      $destinations[] = $admin_path . '/fields/' . $field['field_name'] . '/field-settings';
 //      $destinations[] = $admin_path . '/fields/' . $field['field_name'];
-
       // Store new field information for any additional submit handlers.
       $form_state['fields_added']['_add_new_field'] = $field['field_name'];
     }
@@ -366,8 +399,44 @@ function simple_fields_manager_submit($form, &$form_state) {
   else {
     drupal_set_message(t('Your settings have been saved.'));
   }
-
 }
+/**
+ * Form constructor for the field instance settings form.
+ *
+ *  Taken from fields_ui.admin.inc
+ * @see field_ui_field_edit_form_validate()
+ * @see field_ui_field_edit_form_submit()
+ * @ingroup forms
+ */
+function simple_fields_field_edit_label_form($form, &$form_state, $instance) {
+  drupal_set_title($instance_label);
+  // Prepare the location field
+  $instance_name = field_read_instances(array('id' => $instance));
+  $instance_name = array_shift($instance_name);
+  $instance_label = $instance_name['label'];
+  $instance_name = $instance_name['field_name'];
+  $field = field_info_field($instance_name);
+  if (!empty($field['locked'])) {
+    $form['locked'] = array(
+      '#markup' => t('The field %field is locked and cannot be edited.', array('%field' => $instance['label'])),
+    );
+    return $form;
+  }
+  $form['instance']['field_label'] = array(
+    '#type' => 'textfield',
+    '#title' => t('New label for: ') . $instance_label . '(' . $instance_name .').',
+    '#default_value' => !empty($instance_labellabel) ? $instance_label : $instance_name,
+    '#required' => TRUE,
+    '#weight' => -20,
+  );
+  // Build the non-configurable instance values.
+  $form['instance']['field_name'] = array(
+    '#type' => 'value',
+    '#value' => $instance['field_name'],
+  );
+  return $form;
+}
+
 function simple_fields_manager_admin($form, &$form_state) {
   require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
   $field_type_options = field_ui_field_type_options();
