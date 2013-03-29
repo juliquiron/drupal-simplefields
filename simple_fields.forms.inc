@@ -15,15 +15,18 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
   $entity_type = variable_get('simple_fields_entity_type','');
   $bundle_name = variable_get('simple_fields_entity_bundle','');
   $location_field = variable_get('simple_fields_location_field','');
+  $exclude_fields = variable_get('simple_fields_exclude_fields','');
   $instance_name = field_read_instances(array('id' => $instance));
   $instance_name = array_shift($instance_name);
   $instance_label = $instance_name['label'];
   $instance_name = $instance_name['field_name'];
+  // Also exclude the location field and the field we are editing
+  $exclude_fields[$location_field] = $location_field;
+  $exclude_fields[$instance_name] = $instance_name;
   $instances = field_info_instances($entity_type, $bundle_name);
+  // Excluding fields
   foreach ($instances as $field) {
-    // TODO excloure camps arbitraris definits a la confiugració
-    //   comparacio darrais amb is_in
-    if($field['field_name'] == $location_field || $field['field_name'] == $instance_name) { continue; }
+    if(in_array($field['field_name'], $exclude_fields)) { continue; }
     $fields[$field['id']] = check_plain($field['label'] . ' (' . $field['field_name'] . ')');
   }
   drupal_set_title(t('Set field dependence for: ') . $instance_label);
@@ -37,6 +40,7 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
       '#title' => t('Set field dependence for: ') . $instance_label,
   //    '#title_display' => 'invisible',
       '#description' => t('Dependee'),
+      '#empty_option' => t('- Select a field -'),
       '#options' => $fields,
     );
   $form =  system_settings_form($form);
@@ -130,6 +134,7 @@ function simple_fields_manager_location_condition_submit($form, &$form_state) {
     conditional_fields_dependency_insert($form_state['values']['dependee'],$form_state['values']['depenent'], $options);
   }
   drupal_set_message(t('condition introduced'));
+  $form_state['redirect'] = 'admin/config/content/simplefields';
 } 
 
 function simple_fields_manager_field_condition_submit($form, &$form_state) {
@@ -145,6 +150,7 @@ function simple_fields_manager_field_condition_submit($form, &$form_state) {
   $options['value'] = array(0=>array('value' => NULL));
   conditional_fields_dependency_insert($form_state['values']['dependee'],$form_state['values']['depenent'], $options);
   drupal_set_message(t('condition introduced'));
+  $form_state['redirect'] = 'admin/config/content/simplefields';
 }
 
 /**
@@ -156,12 +162,14 @@ function simple_fields_manager_field_condition_submit($form, &$form_state) {
  * @ingroup forms
  */
 function simple_fields_field_edit_label_form($form, &$form_state, $instance) {
-  drupal_set_title($instance_label);
   // Prepare the location field
+  $entity_type = variable_get('simple_fields_entity_type','');
+  $bundle_name = variable_get('simple_fields_entity_bundle','');
   $instance_name = field_read_instances(array('id' => $instance));
   $instance_name = array_shift($instance_name);
   $instance_label = $instance_name['label'];
   $instance_name = $instance_name['field_name'];
+  drupal_set_title($instance_label);
   $field = field_info_field($instance_name);
   if (!empty($field['locked'])) {
     $form['locked'] = array(
@@ -172,19 +180,51 @@ function simple_fields_field_edit_label_form($form, &$form_state, $instance) {
   $form['instance']['field_label'] = array(
     '#type' => 'textfield',
     '#title' => t('New label for: ') . $instance_label . '(' . $instance_name .').',
-    '#default_value' => !empty($instance_labellabel) ? $instance_label : $instance_name,
+    '#default_value' => !empty($instance_label) ? $instance_label : $instance_name,
     '#required' => TRUE,
+    '#size' => 60,
+    '#maxlength' => 260,
     '#weight' => -20,
   );
   // Build the non-configurable instance values.
   $form['instance']['field_name'] = array(
     '#type' => 'value',
-    '#value' => $instance['field_name'],
+    '#value' => $instance_name,
   );
+  $form['instance']['entity_type'] = array(
+    '#type' => 'value',
+    '#value' => $entity_type,
+  );
+  $form['instance']['bundle'] = array(
+    '#type' => 'value',
+    '#value' => $bundle_name,
+  );
+  $form =  system_settings_form($form);
+  $form['#submit'][] = 'simple_fields_field_edit_label_form_submit';
   return $form;
+}
+function simple_fields_field_edit_label_form_submit($form, &$form_state) {
+  $values = $form_state['values'];
+  $instance = array(
+    'field_name' => $values['field_name'],
+    'entity_type' => $values['entity_type'],
+    'bundle' => $values['bundle'],
+    'label' => $values['field_label'],
+    );
+  field_update_instance($instance);
+  $form_state['redirect'] = 'admin/config/content/simplefields';
 }
 
 function simple_fields_manager_admin($form, &$form_state) {
+  $entity_type = variable_get('simple_fields_entity_type','');
+  $bundle_name = variable_get('simple_fields_entity_bundle','');
+  $instances = field_info_instances($entity_type, $bundle_name);
+  $field_list = array();
+  $exclude_fields = array(variable_get('simple_fields_location_field',''));
+  foreach ($instances as $field) {
+    if(in_array($field['field_name'], $exclude_fields)) { continue; }
+    $field_list[$field['field_name']] = check_plain($field['label'] . ' (' . $field['field_name'] . ')');
+  }
   require_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'field_ui') . '/field_ui.admin.inc'; 
   $field_type_options = field_ui_field_type_options();
   $widget_type_options = field_ui_widget_type_options(NULL, TRUE);
@@ -204,6 +244,14 @@ function simple_fields_manager_admin($form, &$form_state) {
     '#type' => 'textfield',
     '#title' => t('Location field name'),
     '#default_value' => variable_get('simple_fields_location_field',''),
+    );
+  $form['simple_fields_exclude_fields'] = array (
+    '#type' => 'select',
+    '#title' => t('Fields to be excluded for simplefields manager'),
+    '#default_value' => variable_get('simple_fields_exclude_fields',''),
+    '#multiple' => TRUE,
+    '#size' => 6,
+    '#options' => $field_list,
     );
   $form['simple_fields_field_type'] = array (
         '#title' => t('Type of the data to store'),
