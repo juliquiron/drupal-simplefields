@@ -134,6 +134,10 @@ function simple_fields_manager($form, &$form_state) {
   $admin_path = 'admin/config/content/simplefields';
   $form = field_ui_field_overview_form($form, &$form_state, $entity_type, $bundle);
   $conditions = conditional_fields_load_dependencies($entity_type, $bundle);
+  if(module_exists('field_group')) {
+    form_load_include($form_state, 'inc', 'field_group', 'field_group.field_ui');
+    field_group_field_ui_overview_form_alter($form, $form_state);
+  }
 
   /**
    * Lets customize the default form 'manage fields'
@@ -158,9 +162,26 @@ function simple_fields_manager($form, &$form_state) {
     t('Label'),
     t('Weight'),
     t('Parent'),
-    array('data' => t('Operations'), 'colspan' => 4),
+    array('data' => t('Operations'), 'colspan' => 5),
     );
 
+  // Clear group options
+  if(module_exists('field_group')) {
+      $params = field_group_field_ui_form_params($form, FALSE);
+    foreach ($form['#groups'] as $count => $group_name) {
+      $form['fields'][$group_name]['format']['type']['#type'] = 'hidden';
+      $form['fields'][$group_name]['settings_summary']['#type'] = 'hidden';
+      $form['fields'][$group_name]['group_name']['#type'] = 'hidden';
+      $form['fields'][$group_name]['settings_edit']['#type'] = 'hidden';
+      $form['fields'][$group_name]['delete']['#cell_attributes'] = array('colspan' => 1);
+      $form['fields'][$group_name]['delete']['#markup'] = l(t('delete'), $params->admin_path . '/groups/' . $group_name . '/delete/form', array('query'=> array('destination' => 'admin/config/content/simplefields')));
+    }
+    $form['additional_settings']['#type'] = 'hidden';
+    $form['fields']['_add_new_group']['format']['type']['#type'] = 'hidden';
+    $form['fields']['_add_new_group']['format']['type']['#value'] =  $form['fields']['_add_new_group']['format']['type']['#default_value'];
+    $form['fields']['_add_new_group']['label']['#size'] = 60;
+    $form['fields']['_add_new_group']['label']['#maxlength'] = 260;
+  }
 //  conditional_fields_dependency_insert();
 
   foreach ($instances as $name => $instance) {
@@ -225,7 +246,15 @@ function simple_fields_manager($form, &$form_state) {
       '#title' => t('edit question'),
       '#href' => $admin_field_path . '/edit',
       '#options' => array('attributes' => array('title' => t('Edit question.'))),
+      '#cell_attributes' => array('colspan' => 2),
       );
+    // After delete return to de simplefields page
+      global $base_url;
+      $admin_path_delete = $base_url .'/' . _field_ui_bundle_admin_path($entity_type, $bundle);
+      $form['fields'][$name]['delete'] = array(
+        '#markup' => l(t('delete'), $admin_path_delete . '/fields/' . $name . '/delete', array('query'=> array('destination' => 'admin/config/content/simplefields'))),
+      );
+    
   }
   unset($form['fields']['_add_existing_field']);
   $form['fields']['_add_new_field']['type']['#type'] = 'hidden';
@@ -239,10 +268,15 @@ function simple_fields_manager($form, &$form_state) {
   $form['fields']['_add_new_field']['field_name']['#size'] = 30;
   $form['fields']['_add_new_field']['field_name']['#maxlength'] = 30;
   unset($form['fields'][$location_field]);
+  // The function can not be founded and we can redeclarate it
+  // we redefine the function with diferent name but the same code
+  // at the end of the file to get this check working
+  $form['fields']['_add_new_field']['field_name']['#machine_name']['exists'] = '_simple_fields_field_name_exists';
 
   $form['#attached']['css'][] = drupal_get_path('module', 'simple_fields') . '/css/forms.css';
   $form['#submit'][] = 'simple_fields_manager_submit';
 
+  dsm($form);
   return $form;
 
 }
@@ -329,4 +363,11 @@ function simple_fields_manager_submit($form, &$form_state) {
  */
 
 
+function _simple_fields_field_name_exists($value) {
+  // Prefix with 'field_'.
+  $field_name = 'field_' . $value;
 
+  // We need to check inactive fields as well, so we can't use
+  // field_info_fields().
+  return (bool) field_read_fields(array('field_name' => $field_name), array('include_inactive' => TRUE));
+}

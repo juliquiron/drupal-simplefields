@@ -197,6 +197,7 @@ function simple_fields_field_edit_label_form($form, &$form_state, $instance) {
   $instance_name = field_read_instances(array('id' => $instance));
   $instance_name = array_shift($instance_name);
   $instance_label = $instance_name['label'];
+  $weight = $instance_name['widget']['weight'];
   $instance_name = $instance_name['field_name'];
   drupal_set_title($instance_label);
   $field = field_info_field($instance_name);
@@ -220,6 +221,10 @@ function simple_fields_field_edit_label_form($form, &$form_state, $instance) {
     '#type' => 'value',
     '#value' => $instance_name,
   );
+  $form['instance']['weight'] = array(
+    '#type' => 'value',
+    '#value' => $weight,
+  );
   $form['instance']['entity_type'] = array(
     '#type' => 'value',
     '#value' => $entity_type,
@@ -239,6 +244,12 @@ function simple_fields_field_edit_label_form_submit($form, &$form_state) {
     'entity_type' => $values['entity_type'],
     'bundle' => $values['bundle'],
     'label' => $values['field_label'],
+    'type' => variable_get('simple_fields_field_type',''),
+    'widget' => array(
+      'type' => variable_get('simple_fields_field_widget', ''),
+      'weight' => $values['weight'],
+      'settings' => array('display_label' => 1),
+    ),
     );
   field_update_instance($instance);
   $form_state['redirect'] = 'admin/config/content/simplefields';
