@@ -1,0 +1,13 @@
+.item-description {
+  font-size: 10px;
+  color: rgb(40,40,40);
+}
+#edit-fields-add-new-group-label,
+#edit-fields-add-new-field-label {
+  width: 600px;
+}
+#edit-fields-add-new-field-label-machine-name-suffix,
+#edit-fields-add-new-field-label-machine-name-suffix .admin-link,
+#edit-fields-add-new-field-label-machine-name-suffix .machine-name-value {
+  display: none;
+}
