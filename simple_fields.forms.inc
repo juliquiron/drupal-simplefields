@@ -9,7 +9,6 @@
  * Menu callback; lists all defined fields for quick reference.
  */
 function simple_fields_manager_field_condition($form, &$form_state, $instance) {
-  dsm($instance);
   $form = array();
   // Token form conditional_fields module .admin.inc file
   $entity_type = variable_get('simple_fields_entity_type','');
@@ -35,15 +34,12 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
   $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
   $default_value = 'none';
   $current_cond = '';
-  dsm($conditions);
   if(isset($conditions['dependents'][$instance_name])) {
     foreach ( $conditions['dependents'][$instance_name] as $id => $cond) {
       /** We assume there is only one dependency in this instance **/
-        dsm($cond['dependee']);
       if(array_key_exists($cond['dependee'],$aviable_conditionals)) {
           $default_value = $aviable_conditionals[$cond['dependee']];
           $current_cond = $id;
-          dsm($default_value);
       }
     }
   }
@@ -69,7 +65,6 @@ function simple_fields_manager_field_condition($form, &$form_state, $instance) {
     );
   $form =  system_settings_form($form);
   $form['#submit'][] = 'simple_fields_manager_field_condition_submit';
-  dsm($form);
   return $form;
 }
 
@@ -110,7 +105,6 @@ function simple_fields_manager_location_condition($form, &$form_state, $instance
   $dependee_instance['default_value_function'] = '';
   $dummy_form = array('#parents' => array());
   $field = field_default_form($entity_type, NULL, $dependee, $dependee_instance, LANGUAGE_NONE, array(), $dummy_form, $form_state);
-  dsm($field);
   $conditions = conditional_fields_load_dependencies($entity_type, $bundle_name);
   foreach ( $conditions['dependees'][$location_field] as $id => $cond) {
     /** We assume there is only one dependency in this instance **/
@@ -124,7 +118,6 @@ function simple_fields_manager_location_condition($form, &$form_state, $instance
   }
   $field[$location_field]['und']['#title'] = t('Set location condition for: ') . $instance_label;
   drupal_set_title(t('Set location condition for: ') . $instance_label);
-  dsm($field);
   $field['depenent'] = array(
       '#type' => 'hidden',
       '#value' => $instance,

@@ -276,7 +276,6 @@ function simple_fields_manager($form, &$form_state) {
   $form['#attached']['css'][] = drupal_get_path('module', 'simple_fields') . '/css/forms.css';
   $form['#submit'][] = 'simple_fields_manager_submit';
 
-  dsm($form);
   return $form;
 
 }
@@ -325,8 +324,6 @@ function simple_fields_manager_submit($form, &$form_state) {
       ),
     );
 
-    dsm($field);
-    dsm($instance);
     // Create the field and instance.
     try {
       field_create_field($field);
